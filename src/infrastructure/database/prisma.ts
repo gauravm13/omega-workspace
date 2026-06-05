@@ -1,21 +1,20 @@
 import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg'; // Explicit official Prisma adapter
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const prismaClientSingleton = () => {
   const connectionString = process.env.DATABASE_URL;
   
-  // 1. Initialize the explicit Postgres pool for Vercel Serverless limitations
   const pool = new Pool({
     connectionString,
     max: 4,                  
     idleTimeoutMillis: 30000, 
     connectionTimeoutMillis: 2000,
+    // CRITICAL FIX: Explicit SSL configuration is strictly required for Vercel Serverless -> Neon
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
   });
   
-  // 2. Bind the native pool to Prisma's "client" engine via the driver adapter
   const adapter = new PrismaPg(pool);
-  
   return new PrismaClient({ adapter });
 };
 

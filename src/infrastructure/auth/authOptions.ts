@@ -5,11 +5,8 @@ import { prisma } from "@/infrastructure/database/prisma";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  // FORCE HARDCODED SECRET TO BYPASS TURBOPACK ENV FAILURE
   secret: "super-secret-enterprise-key-change-in-prod", 
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
   providers: [
     CredentialsProvider({
       name: "Mock Enterprise SSO",
@@ -20,16 +17,19 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email) return null;
 
-        const user = await prisma.user.upsert({
-          where: { email: credentials.email },
-          update: {},
-          create: {
-            email: credentials.email,
-            name: credentials.name || "Test User",
-          },
-        });
+        try {
+          const user = await prisma.user.upsert({
+            where: { email: credentials.email },
+            update: {},
+            create: { email: credentials.email, name: credentials.name || "Test User" },
+          });
 
-        return { id: user.id, email: user.email, name: user.name };
+          return { id: user.id, email: user.email, name: user.name };
+        } catch (error) {
+          // CRITICAL FIX: If the DB crashes, log it loudly to Vercel Runtime Logs
+          console.error("[DATABASE_UPSERT_CRASH]:", error);
+          return null;
+        }
       }
     })
   ],
