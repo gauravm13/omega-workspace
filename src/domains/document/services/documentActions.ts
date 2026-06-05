@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation"; // Added import
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/infrastructure/auth/authOptions";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -62,7 +63,6 @@ export async function updateDocumentContent(documentId: string, richTextContent:
 
     if (!isOwner && !isEditor) return { success: false, error: "UNAUTHORIZED." };
 
-    // Update document AND create an immutable version snapshot
     const updatedDoc = await prisma.$transaction([
       prisma.document.update({
         where: { id: documentId },
@@ -146,5 +146,33 @@ export async function getDocumentCatalog() {
     };
   } catch (error) {
     return { success: false, error: "Failed to compile registry." };
+  }
+}
+
+// ==========================================
+// NEW: ASSET DESTRUCTION PIPELINE
+// ==========================================
+export async function deleteDocument(documentId: string) {
+  const userId = await getAuthenticatedUser();
+  let wasSuccessful = false;
+  
+  try {
+    // 1. Verify exact ownership
+    const document = await prisma.document.findUnique({ where: { id: documentId } });
+    if (!document || document.ownerId !== userId) {
+      return { success: false, error: "UNAUTHORIZED: Only the owner can destroy this asset." };
+    }
+
+    // 2. Execute cascade delete
+    await prisma.document.delete({ where: { id: documentId } });
+    wasSuccessful = true;
+  } catch (error) {
+    return { success: false, error: "Failed to execute destruction pipeline." };
+  }
+
+  // 3. Purge cache and route back to workspace safely
+  if (wasSuccessful) {
+    revalidatePath("/dashboard");
+    redirect("/dashboard");
   }
 }

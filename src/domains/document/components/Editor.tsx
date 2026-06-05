@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { renameDocument, updateDocumentContent, shareDocument, restoreVersion } from "@/domains/document/services/documentActions";
+import { renameDocument, updateDocumentContent, shareDocument, restoreVersion, deleteDocument } from "@/domains/document/services/documentActions";
 import { parseDocumentForImport, uploadDocumentAttachment } from "@/domains/storage/services/uploadActions";
 
 export function Editor({ document, isOwner, canEdit, roleBadge }: { document: any; isOwner: boolean; canEdit: boolean; roleBadge: string }) {
@@ -34,9 +34,17 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
     setShowHistory(false);
   };
 
-  // ==========================================
-  // INLINE IMPORT & ATTACHMENT HANDLERS
-  // ==========================================
+  // NEW: DELETE DOCUMENT LOGIC
+  const handleDeleteDocument = async () => {
+    if (!confirm("Are you sure you want to PERMANENTLY delete this document? This action cannot be undone.")) return;
+    setSaveStatus("Deleting...");
+    const res = await deleteDocument(document.id);
+    if (res && !res.success) {
+      alert(res.error);
+      setSaveStatus("Saved");
+    }
+  };
+
   const handleImportInline = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !canEdit) return;
@@ -49,13 +57,13 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
     if (result.success && result.html) {
       if (editorRef.current) {
         editorRef.current.innerHTML += `<br><hr><br>${result.html}`;
-        await handleSave(); // Trigger snapshot save immediately after import
+        await handleSave(); 
       }
     } else {
       alert(result.error || "Failed to parse imported file.");
       setSaveStatus("Saved");
     }
-    e.target.value = ""; // Reset input so the same file can be clicked again
+    e.target.value = ""; 
   };
 
   const handleAttachAsset = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,14 +75,11 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
     formData.append("file", file);
 
     const result = await uploadDocumentAttachment(document.id, formData);
-    if (!result.success) {
-      alert(result.error || "Failed to attach file.");
-    }
+    if (!result.success) alert(result.error || "Failed to attach file.");
     setSaveStatus("Saved");
-    e.target.value = ""; // Reset input
+    e.target.value = ""; 
   };
 
-  // EXPORT UTILITIES
   const exportHTML = () => {
     const blob = new Blob([editorRef.current?.innerHTML || ""], { type: "text/html" });
     const url = URL.createObjectURL(blob);
@@ -93,10 +98,8 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
   return (
     <div className="max-w-7xl mx-auto px-4 flex gap-6 items-start">
       
-      {/* MAIN EDITOR COLUMN */}
       <div className="flex-1 space-y-6">
          
-        {/* HEADER */}
         <div className="bg-white p-6 border rounded-lg shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             
@@ -129,12 +132,18 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
                 <button onClick={exportHTML} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⬇ HTML</button>
                 <button onClick={exportPDF} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⬇ PDF</button>
                 <button onClick={() => setShowHistory(!showHistory)} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⏱ History</button>
+                
+                {/* NEW: DELETE BUTTON (Owner Only) */}
+                {isOwner && (
+                  <button onClick={handleDeleteDocument} className="text-xs font-medium text-red-600 border border-red-200 bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition-colors">
+                    🗑️ Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* TOOLBAR */}
         {canEdit && (
           <div className="flex flex-wrap gap-2 bg-white p-2 border rounded-md shadow-sm sticky top-4 z-10">
             <ToolbarButton onClick={() => handleFormat("bold")} className="font-bold">B</ToolbarButton>
@@ -148,13 +157,11 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
             <ToolbarButton onClick={() => handleFormat("insertOrderedList")}>1. List</ToolbarButton>
             <div className="w-px h-6 bg-gray-300 mx-1 self-center"></div>
             
-            {/* INLINE IMPORT FILE PICKER */}
             <label className="cursor-pointer px-3 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded border border-blue-200 text-sm font-medium transition-colors">
               + Import (.docx)
               <input type="file" className="hidden" accept=".docx,.txt,.md" onChange={handleImportInline} />
             </label>
 
-            {/* ASSET ATTACHMENT FILE PICKER */}
             <label className="cursor-pointer px-3 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 text-sm font-medium transition-colors">
               📎 Attach Asset
               <input type="file" className="hidden" onChange={handleAttachAsset} />
@@ -165,7 +172,6 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
           </div>
         )}
 
-        {/* PAPER SURFACE */}
         <div className="bg-gray-200 p-4 rounded-lg">
           <div 
             ref={editorRef}
@@ -177,7 +183,6 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
           ></div>
         </div>
 
-        {/* ATTACHMENTS GALLERY */}
         {document.assets?.length > 0 && (
           <div className="bg-white p-6 border rounded-lg shadow-sm">
             <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Document Assets</h3>
@@ -194,7 +199,6 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
 
       </div>
 
-      {/* VERSION HISTORY SIDEBAR */}
       {showHistory && (
         <div className="w-80 shrink-0 bg-white border rounded-lg shadow-sm p-4 h-[calc(100vh-6rem)] overflow-y-auto sticky top-4">
           <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Version History</h3>

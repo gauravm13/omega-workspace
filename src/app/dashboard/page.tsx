@@ -3,9 +3,9 @@ import { authOptions } from "@/infrastructure/auth/authOptions";
 import { redirect } from "next/navigation";
 import { getDocumentCatalog, createDocument } from "@/domains/document/services/documentActions";
 import { uploadDocumentAsset } from "@/domains/storage/services/uploadActions";
+import { SignOutButton } from "@/domains/identity/components/SignOutButton"; // <-- Imported Button
 import Link from "next/link";
 
-// Define strict UI type bounds for isolated page compilation parity
 interface OwnedDocumentSummary {
   id: string;
   title: string;
@@ -19,13 +19,10 @@ export default async function Dashboard() {
   const catalogResponse = await getDocumentCatalog();
   const catalog = catalogResponse.success ? catalogResponse.data : { owned: [], shared: [] };
 
-  // Explicitly wrapper actions to comply with Next.js 16 form action signatures
   const handleUploadForm = async (formData: FormData): Promise<void> => {
     "use server";
     const result = await uploadDocumentAsset(formData);
-    if (!result.success) {
-      console.error(`[DASHBOARD_UPLOAD_MUTATION_FAILURE]: ${result.error}`);
-    }
+    if (!result.success) console.error(`[DASHBOARD_UPLOAD_MUTATION_FAILURE]: ${result.error}`);
   };
 
   const handleCreateForm = async (): Promise<void> => {
@@ -38,10 +35,12 @@ export default async function Dashboard() {
       <header className="flex justify-between items-center border-b pb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Omega Workspace</h1>
-          <p className="text-gray-500">Authenticated as: {session.user.email}</p>
+          <div className="flex items-center gap-3 mt-2">
+            <p className="text-gray-500">Authenticated as: {session.user.email}</p>
+            <SignOutButton /> {/* <-- Added Sign Out Button */}
+          </div>
         </div>
         <div className="flex gap-4">
-          {/* File Upload Form with typesafe handler wrapper */}
           <form action={handleUploadForm} className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md shadow-sm">
             <input 
               type="file" 
@@ -55,7 +54,6 @@ export default async function Dashboard() {
             </button>
           </form>
           
-          {/* Create Blank Document Form with typesafe handler wrapper */}
           <form action={handleCreateForm}>
             <button type="submit" className="bg-black text-white px-5 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors">
               + New Document
@@ -70,7 +68,6 @@ export default async function Dashboard() {
           <p className="text-gray-400 text-sm">No documents found. Initialize a new asset.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* FIX: Strongly typed mapping parameter element to guarantee strict build evaluation */}
             {(catalog?.owned as OwnedDocumentSummary[]).map((doc: OwnedDocumentSummary) => (
               <Link href={`/document/${doc.id}`} key={doc.id} className="block p-6 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow">
                 <h3 className="font-semibold text-lg truncate">{doc.title}</h3>
