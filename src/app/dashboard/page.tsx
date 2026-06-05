@@ -12,6 +12,21 @@ export default async function Dashboard() {
   const catalogResponse = await getDocumentCatalog();
   const catalog = catalogResponse.success ? catalogResponse.data : { owned: [], shared: [] };
 
+  // FIX: Explicitly wrapper action to comply with Next.js 16 form action type signatures
+  const handleUploadForm = async (formData: FormData): Promise<void> => {
+    "use server";
+    const result = await uploadDocumentAsset(formData);
+    if (!result.success) {
+      // In production, log errors to an infrastructure monitoring context
+      console.error(`[DASHBOARD_UPLOAD_MUTATION_FAILURE]: ${result.error}`);
+    }
+  };
+
+  const handleCreateForm = async (): Promise<void> => {
+    "use server";
+    await createDocument("Untitled Document");
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-8 space-y-12">
       <header className="flex justify-between items-center border-b pb-6">
@@ -20,7 +35,8 @@ export default async function Dashboard() {
           <p className="text-gray-500">Authenticated as: {session.user.email}</p>
         </div>
         <div className="flex gap-4">
-          <form action={uploadDocumentAsset} className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md shadow-sm">
+          {/* File Upload Form with typesafe handler wrapper */}
+          <form action={handleUploadForm} className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md shadow-sm">
             <input 
               type="file" 
               name="file" 
@@ -32,7 +48,9 @@ export default async function Dashboard() {
               Upload (.docx/.txt)
             </button>
           </form>
-          <form action={async () => { "use server"; await createDocument("Untitled Document"); }}>
+          
+          {/* Create Blank Document Form with typesafe handler wrapper */}
+          <form action={handleCreateForm}>
             <button type="submit" className="bg-black text-white px-5 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors">
               + New Document
             </button>
