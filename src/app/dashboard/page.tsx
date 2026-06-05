@@ -5,6 +5,13 @@ import { getDocumentCatalog, createDocument } from "@/domains/document/services/
 import { uploadDocumentAsset } from "@/domains/storage/services/uploadActions";
 import Link from "next/link";
 
+// Define strict UI type bounds for isolated page compilation parity
+interface OwnedDocumentSummary {
+  id: string;
+  title: string;
+  updatedAt: Date | string;
+}
+
 export default async function Dashboard() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/");
@@ -12,12 +19,11 @@ export default async function Dashboard() {
   const catalogResponse = await getDocumentCatalog();
   const catalog = catalogResponse.success ? catalogResponse.data : { owned: [], shared: [] };
 
-  // FIX: Explicitly wrapper action to comply with Next.js 16 form action type signatures
+  // Explicitly wrapper actions to comply with Next.js 16 form action signatures
   const handleUploadForm = async (formData: FormData): Promise<void> => {
     "use server";
     const result = await uploadDocumentAsset(formData);
     if (!result.success) {
-      // In production, log errors to an infrastructure monitoring context
       console.error(`[DASHBOARD_UPLOAD_MUTATION_FAILURE]: ${result.error}`);
     }
   };
@@ -64,7 +70,8 @@ export default async function Dashboard() {
           <p className="text-gray-400 text-sm">No documents found. Initialize a new asset.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {catalog?.owned.map((doc) => (
+            {/* FIX: Strongly typed mapping parameter element to guarantee strict build evaluation */}
+            {(catalog?.owned as OwnedDocumentSummary[]).map((doc: OwnedDocumentSummary) => (
               <Link href={`/document/${doc.id}`} key={doc.id} className="block p-6 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow">
                 <h3 className="font-semibold text-lg truncate">{doc.title}</h3>
                 <p className="text-xs text-gray-400 mt-2">Last updated: {new Date(doc.updatedAt).toLocaleDateString()}</p>
