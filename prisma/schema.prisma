@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+// ==========================================
+// DOMAIN: IDENTITY
+// ==========================================
+// ==========================================
+// DOMAIN: IDENTITY
+// ==========================================
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  // Relationships
+  ownedDocs     Document[]        @relation("DocumentOwner")
+  sharedAccess  DocumentAccess[]
+  savedVersions DocumentVersion[] // <-- ADD THIS LINE
+}
+
+// ==========================================
+// DOMAIN: DOCUMENT
+// ==========================================
+model Document {
+  id        String   @id @default(cuid())
+  title     String   @default("Untitled Document")
+  content   String?  @db.Text // Will store our Rich Text JSON/HTML
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  versions   DocumentVersion[]
+  // Ownership & Multi-Tenancy
+  ownerId   String
+  owner     User     @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Sharing Model
+  accessList DocumentAccess[]
+  
+  // Associated Uploads
+  assets     FileAsset[]
+
+  @@index([ownerId])
+}
+
+// Junction Table for Sharing (ACL - Access Control List)
+model DocumentAccess {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  role       AccessRole @default(VIEWER) // Enum for strict role typing
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([userId])
+}
+
+
+
+
+
+enum AccessRole {
+  VIEWER
+  COMMENTER
+  EDITOR
+}
+
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+  
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  savedById  String
+  savedBy    User     @relation(fields: [savedById], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+// ==========================================
+// DOMAIN: STORAGE
+// ==========================================
+model FileAsset {
+  id         String   @id @default(cuid())
+  fileName   String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
