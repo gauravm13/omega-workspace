@@ -34,6 +34,46 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
     setShowHistory(false);
   };
 
+  // ==========================================
+  // INLINE IMPORT & ATTACHMENT HANDLERS
+  // ==========================================
+  const handleImportInline = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !canEdit) return;
+
+    setSaveStatus("Parsing Document...");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await parseDocumentForImport(formData);
+    if (result.success && result.html) {
+      if (editorRef.current) {
+        editorRef.current.innerHTML += `<br><hr><br>${result.html}`;
+        await handleSave(); // Trigger snapshot save immediately after import
+      }
+    } else {
+      alert(result.error || "Failed to parse imported file.");
+      setSaveStatus("Saved");
+    }
+    e.target.value = ""; // Reset input so the same file can be clicked again
+  };
+
+  const handleAttachAsset = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !canEdit) return;
+
+    setSaveStatus("Uploading Asset...");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await uploadDocumentAttachment(document.id, formData);
+    if (!result.success) {
+      alert(result.error || "Failed to attach file.");
+    }
+    setSaveStatus("Saved");
+    e.target.value = ""; // Reset input
+  };
+
   // EXPORT UTILITIES
   const exportHTML = () => {
     const blob = new Blob([editorRef.current?.innerHTML || ""], { type: "text/html" });
@@ -41,7 +81,8 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
     const a = window.document.createElement("a");
     a.href = url; a.download = `${title}.html`; a.click();
   };
-  const exportPDF = () => window.print(); // Native browser PDF print is the most robust stateless approach
+  
+  const exportPDF = () => window.print();
 
   const ToolbarButton = ({ onClick, children, className = "" }: { onClick: () => void, children: React.ReactNode, className?: string }) => (
     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} className={`px-3 py-1 hover:bg-gray-100 rounded border text-sm ${className}`}>
@@ -54,12 +95,11 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
       
       {/* MAIN EDITOR COLUMN */}
       <div className="flex-1 space-y-6">
-        
-        {/* FIX: Re-architected Header to prevent squishing */}
+         
+        {/* HEADER */}
         <div className="bg-white p-6 border rounded-lg shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             
-            {/* Title & Badge Area */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
                 <input 
@@ -77,7 +117,6 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
               <p className="text-sm text-gray-400 mt-1">Status: {saveStatus} {!canEdit && "(Read Only)"}</p>
             </div>
 
-            {/* Actions Area (Share & Exports) */}
             <div className="flex flex-col items-end gap-2 shrink-0">
               {isOwner && (
                 <form onSubmit={async (e) => { e.preventDefault(); await shareDocument(document.id, shareEmail, "EDITOR"); setShareEmail(""); }} className="flex gap-2">
@@ -87,9 +126,9 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
                 </form>
               )}
               <div className="flex gap-2">
-                <button onClick={exportHTML} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">↓ HTML</button>
-                <button onClick={exportPDF} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">🖨️ PDF</button>
-                <button onClick={() => setShowHistory(!showHistory)} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">🕒 History</button>
+                <button onClick={exportHTML} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⬇ HTML</button>
+                <button onClick={exportPDF} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⬇ PDF</button>
+                <button onClick={() => setShowHistory(!showHistory)} className="text-xs text-gray-500 border px-2 py-1 rounded hover:bg-gray-50">⏱ History</button>
               </div>
             </div>
           </div>
@@ -107,6 +146,20 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
             <div className="w-px h-6 bg-gray-300 mx-1 self-center"></div>
             <ToolbarButton onClick={() => handleFormat("insertUnorderedList")}>• List</ToolbarButton>
             <ToolbarButton onClick={() => handleFormat("insertOrderedList")}>1. List</ToolbarButton>
+            <div className="w-px h-6 bg-gray-300 mx-1 self-center"></div>
+            
+            {/* INLINE IMPORT FILE PICKER */}
+            <label className="cursor-pointer px-3 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded border border-blue-200 text-sm font-medium transition-colors">
+              + Import (.docx)
+              <input type="file" className="hidden" accept=".docx,.txt,.md" onChange={handleImportInline} />
+            </label>
+
+            {/* ASSET ATTACHMENT FILE PICKER */}
+            <label className="cursor-pointer px-3 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 text-sm font-medium transition-colors">
+              📎 Attach Asset
+              <input type="file" className="hidden" onChange={handleAttachAsset} />
+            </label>
+
             <div className="flex-1"></div>
             <ToolbarButton onClick={handleSave} className="bg-black text-white hover:bg-gray-800">💾 Force Save</ToolbarButton>
           </div>
@@ -114,16 +167,31 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
 
         {/* PAPER SURFACE */}
         <div className="bg-gray-200 p-4 rounded-lg">
-          {/* Editable Surface Container Element */}
-<div 
-  ref={editorRef}
-  contentEditable={canEdit}
-  suppressContentEditableWarning={true}
-  onBlur={handleSave}
-  className="min-h-[800px] max-w-[816px] mx-auto bg-white border border-gray-300 shadow-md p-12 focus:outline-none text-gray-900 editor-canvas"
-  dangerouslySetInnerHTML={{ __html: initialContent }}
-/>
+          <div 
+            ref={editorRef}
+            contentEditable={canEdit}
+            suppressContentEditableWarning={true}
+            onBlur={handleSave}
+            className="min-h-[800px] max-w-[816px] mx-auto bg-white border border-gray-300 shadow-md p-12 focus:outline-none text-gray-900 editor-canvas"
+            dangerouslySetInnerHTML={{ __html: initialContent }}
+          ></div>
         </div>
+
+        {/* ATTACHMENTS GALLERY */}
+        {document.assets?.length > 0 && (
+          <div className="bg-white p-6 border rounded-lg shadow-sm">
+            <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Document Assets</h3>
+            <div className="flex flex-wrap gap-4">
+              {document.assets.map((asset: any) => (
+                <a key={asset.id} href={asset.fileUrl} download={asset.fileName} className="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-colors text-sm shadow-sm">
+                  <span className="truncate max-w-[200px] font-medium">{asset.fileName}</span>
+                  <span className="text-xs text-gray-400 border-l pl-2">{(asset.fileSize / 1024).toFixed(1)} KB</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* VERSION HISTORY SIDEBAR */}
@@ -136,7 +204,7 @@ export function Editor({ document, isOwner, canEdit, roleBadge }: { document: an
                 <p className="font-medium text-gray-700">{new Date(v.createdAt).toLocaleString()}</p>
                 <p className="text-xs text-gray-500 mb-2 truncate">By: {v.savedBy.email}</p>
                 {canEdit && (
-                  <button onClick={() => handleRestore(v.id)} className="text-xs bg-white border text-blue-600 px-2 py-1 rounded w-full hover:bg-blue-50">
+                  <button onClick={() => handleRestore(v.id)} className="text-xs bg-white border text-blue-600 px-2 py-1 rounded w-full hover:bg-blue-50 transition-colors">
                     Restore This Version
                   </button>
                 )}
